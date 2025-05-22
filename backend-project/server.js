@@ -75,11 +75,55 @@ app.put('/api/services/:code', (req, res) => {
 // Delete service
 app.delete('/api/services/:code', (req, res) => {
     const { code } = req.params;
-    db.query('DELETE FROM Services WHERE ServiceCode = ?', [code], (err, result) => {
-        if (err) return res.status(400).json({ error: err.message });
-        res.json({ message: 'Service deleted' });
+    
+    // First check if there are any service records
+    db.query('SELECT COUNT(*) as count FROM ServiceRecord WHERE ServiceCode = ?', [code], (err, results) => {
+        if (err) {
+            console.error('Error checking service records:', err);
+            return res.status(500).json({ error: 'Failed to check service records' });
+        }
+
+        const recordCount = results[0].count;
+        console.log(`Found ${recordCount} service records for service code ${code}`);
+
+        // If there are records, delete them
+        if (recordCount > 0) {
+            db.query('DELETE FROM ServiceRecord WHERE ServiceCode = ?', [code], (err, result) => {
+                if (err) {
+                    console.error('Error deleting service records:', err);
+                    return res.status(500).json({ 
+                        error: 'Failed to delete service records',
+                        details: err.message 
+                    });
+                }
+                console.log(`Successfully deleted ${result.affectedRows} service records`);
+                
+                // After deleting records, delete the service
+                deleteService(code, res);
+            });
+        } else {
+            // If no records exist, directly delete the service
+            deleteService(code, res);
+        }
     });
 });
+
+// Helper function to delete service
+function deleteService(code, res) {
+    db.query('DELETE FROM Services WHERE ServiceCode = ?', [code], (err, result) => {
+        if (err) {
+            console.error('Error deleting service:', err);
+            return res.status(500).json({ 
+                error: 'Failed to delete service',
+                details: err.message 
+            });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Service not found' });
+        }
+        res.json({ message: 'Service deleted successfully' });
+    });
+}
 
 // ==================== CARS ====================
 app.get('/api/cars', (req, res) => {
